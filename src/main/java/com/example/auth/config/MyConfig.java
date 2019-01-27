@@ -1,0 +1,111 @@
+package com.example.auth.config;
+
+import com.example.auth.security.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import java.util.Collections;
+
+
+@EnableWebSecurity
+public class MyConfig extends WebSecurityConfigurerAdapter{
+
+    private static final String[] AUTH_WHITELIST = {
+            // -- swagger ui
+            "/swagger-resources/**",
+            "/swagger-ui.html",
+            "/v2/api-docs",
+            "/webjars/**",
+            "/register"
+    };
+
+    @Autowired
+    private CustomUserDetailsService customUserDetailsService;
+
+
+    @Autowired
+    private  JwtAuthenticationProvider authenticationProvider;
+
+    @Bean
+    public  DaoAuthenticationProvider authProvider() {
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        authProvider.setUserDetailsService(customUserDetailsService);
+        authProvider.setPasswordEncoder(passwordEncoder());
+        return authProvider;
+    }
+
+
+    @Override
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+
+    @Bean
+    public JwtAuthenticationTokenFilter authenticationTokenFilter() throws Exception {
+        JwtAuthenticationTokenFilter filter = new JwtAuthenticationTokenFilter();
+        filter.setAuthenticationManager(authenticationManagerBean());
+        filter.setAuthenticationSuccessHandler(new JwtSuccessHandler());
+        return filter;
+    }
+
+    @Bean
+    public RequestBodyReaderAuthenticationFilter customAuthenticationFilter() throws Exception {
+        RequestBodyReaderAuthenticationFilter requestBodyReaderAuthenticationFilter = new RequestBodyReaderAuthenticationFilter();
+        requestBodyReaderAuthenticationFilter.setAuthenticationSuccessHandler(new AuthSuccessHandler());
+        requestBodyReaderAuthenticationFilter.setAuthenticationManager(authenticationManagerBean());
+        return requestBodyReaderAuthenticationFilter;
+    }
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.authenticationProvider(authProvider())
+                .authenticationProvider(authenticationProvider);
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+                .headers()
+                .frameOptions()
+                .disable();
+        http
+                .csrf().disable();
+        http
+                .authorizeRequests()
+                .antMatchers(AUTH_WHITELIST)
+                .permitAll()
+                .antMatchers("/login", "**/api/**").authenticated();
+
+        http    .addFilterBefore(
+                customAuthenticationFilter(),
+                UsernamePasswordAuthenticationFilter.class);
+        http    .addFilterBefore(
+                authenticationTokenFilter(),
+                UsernamePasswordAuthenticationFilter.class);
+        http    .sessionManagement()
+                .disable();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+}
